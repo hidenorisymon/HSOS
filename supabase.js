@@ -1,13 +1,10 @@
 const SUPABASE_URL = 'https://samuwgxtsgbkyybbfurf.supabase.co';
-const SUPABASE_ANON_KEY = 'sb_publishable_Y4Aw_FZ1fMrlZAhYiRRiWg_HPW1kwIp';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InNhbXV3Z3h0c2dia3l5YmJmdXJmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzg2MjIyNzQsImV4cCI6MjA5NDE5ODI3NH0.rrAE1nzKMEKIqCqaps__qb7i8WuLuXWu8n9wE1OWkFo';
 
 (function () {
   'use strict';
 
-  if (!window.supabase) {
-    console.error('[SupabaseAuth] Supabase client not found.');
-    return;
-  }
+  if (!window.supabase) { console.error('[SupabaseAuth] Supabase client not found.'); return; }
 
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
     auth: { flowType: 'implicit', detectSessionInUrl: false, persistSession: true },
@@ -17,11 +14,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_Y4Aw_FZ1fMrlZAhYiRRiWg_HPW1kwIp';
 
   async function getStatus(session) {
     if (!session) return null;
-    const { data, error } = await client
-      .from('profiles')
-      .select('status')
-      .eq('id', session.user.id)
-      .single();
+    const { data, error } = await client.from('profiles').select('status').eq('id', session.user.id).single();
     if (error) { console.error('[SupabaseAuth] profiles error:', error.message); return null; }
     return data.status;
   }
@@ -29,10 +22,7 @@ const SUPABASE_ANON_KEY = 'sb_publishable_Y4Aw_FZ1fMrlZAhYiRRiWg_HPW1kwIp';
   const _cleanUrl = window.location.origin + window.location.pathname;
 
   async function signInWithGoogle() {
-    const { error } = await client.auth.signInWithOAuth({
-      provider: 'google',
-      options: { redirectTo: _cleanUrl },
-    });
+    const { error } = await client.auth.signInWithOAuth({ provider: 'google', options: { redirectTo: _cleanUrl } });
     if (error) console.error('[SupabaseAuth] signIn error:', error.message);
   }
 
@@ -60,10 +50,8 @@ const SUPABASE_ANON_KEY = 'sb_publishable_Y4Aw_FZ1fMrlZAhYiRRiWg_HPW1kwIp';
   }
 
   client.auth.onAuthStateChange(async (event, session) => {
-    console.log('[SupabaseAuth] authStateChange:', event, session ? session.user.email : 'null');
     _state.session = session;
     _state.status = await getStatus(session);
-    console.log('[SupabaseAuth] status:', _state.status);
     _notify(event, session, _state.status);
   });
 
@@ -75,27 +63,21 @@ const SUPABASE_ANON_KEY = 'sb_publishable_Y4Aw_FZ1fMrlZAhYiRRiWg_HPW1kwIp';
       const rt = p.get('refresh_token');
       if (at && rt) {
         const { data, error } = await client.auth.setSession({ access_token: at, refresh_token: rt });
-        console.log('[SupabaseAuth] setSession:', error ? 'ERROR:' + error.message : 'ok');
         if (!error && data.session) {
           _state.session = data.session;
           _state.status = await getStatus(data.session);
-          console.log('[SupabaseAuth] status from hash:', _state.status);
         }
       }
       window.history.replaceState({}, document.title, _cleanUrl);
     }
-
     if (!_state.session) {
       const session = await getSession();
       _state.session = session;
       _state.status = await getStatus(session);
     }
-
-    console.log('[SupabaseAuth] ready, session:', _state.session ? _state.session.user.email : 'null', 'status:', _state.status);
     _state.ready = true;
     _notify('INITIAL', _state.session, _state.status);
   })();
 
   window.SupabaseAuth = { signInWithGoogle, signOut, getSession, getStatus, onAuthStateChange, _state };
-  console.log('[SupabaseAuth] module loaded.');
 })();
