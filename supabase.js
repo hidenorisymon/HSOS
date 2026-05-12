@@ -99,20 +99,23 @@ const SUPABASE_ANON_KEY = 'sb_publishable_Y4Aw_FZ1fMrlZAhYiRRiWg_HPW1kwIp';
 
   (async function init() {
     const hash = window.location.hash;
+    console.log('[SupabaseAuth] hash:', hash ? hash.substring(0, 40) : 'empty');
     if (hash && hash.includes('access_token=')) {
       const params = new URLSearchParams(hash.substring(1));
       const accessToken = params.get('access_token');
       const refreshToken = params.get('refresh_token');
+      console.log('[SupabaseAuth] tokens found, calling setSession...');
       if (accessToken && refreshToken) {
-        await client.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+        const { data, error } = await client.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+        console.log('[SupabaseAuth] setSession:', error ? 'ERROR: ' + error.message : 'ok, user: ' + (data.session ? data.session.user.email : 'null'));
       }
-      // Clean up the ugly URL hash
       window.history.replaceState({}, document.title, _cleanUrl);
     }
-
     const session = await getSession();
+    console.log('[SupabaseAuth] getSession:', session ? session.user.email : 'null');
     _state.session = session;
     _state.status = session ? await getStatus() : null;
+    console.log('[SupabaseAuth] status:', _state.status);
     _state.ready = true;
     _notify('INITIAL', _state.session, _state.status);
   })();
