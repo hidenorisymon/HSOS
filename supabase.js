@@ -7,23 +7,18 @@ const SUPABASE_ANON_KEY = 'sb_publishable_Y4Aw_FZ1fMrlZAhYiRRiWg_HPW1kwIp';
 (function () {
   'use strict';
 
-  // Supabase UMD build exposes window.supabase after its <script> tag loads.
   if (!window.supabase) {
-    console.error(
-      '[SupabaseAuth] Supabase client not found. ' +
-      'Load the Supabase CDN script before supabase.js.'
-    );
+    console.error('[SupabaseAuth] Supabase client not found. Load the Supabase CDN script before supabase.js.');
     return;
   }
 
   const client = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
-    auth: { flowType: 'implicit', detectSessionInUrl: true, persistSession: true },
+    auth: { flowType: 'implicit', detectSessionInUrl: false, persistSession: true },
   });
 
-  // Internal state — read via window.SupabaseAuth._state
   const _state = {
     session: null,
-    status: null,   // 'pending' | 'approved' | 'rejected' | null
+    status: null,
     ready: false,
   };
 
@@ -48,10 +43,13 @@ const SUPABASE_ANON_KEY = 'sb_publishable_Y4Aw_FZ1fMrlZAhYiRRiWg_HPW1kwIp';
 
   // ── Auth actions ────────────────────────────────────────────────────────────
 
+  // Use the clean page URL (no stale query params or hash from previous attempts)
+  const _cleanUrl = window.location.origin + window.location.pathname;
+
   async function signInWithGoogle() {
     const { error } = await client.auth.signInWithOAuth({
       provider: 'google',
-      options: { redirectTo: window.location.href },
+      options: { redirectTo: _cleanUrl },
     });
     if (error) console.error('[SupabaseAuth] signInWithGoogle failed:', error.message);
   }
@@ -61,6 +59,8 @@ const SUPABASE_ANON_KEY = 'sb_publishable_Y4Aw_FZ1fMrlZAhYiRRiWg_HPW1kwIp';
     if (error) console.error('[SupabaseAuth] signOut failed:', error.message);
     _state.session = null;
     _state.status = null;
+    // Clean up URL after sign out
+    window.history.replaceState({}, document.title, _cleanUrl);
   }
 
   async function getSession() {
@@ -74,7 +74,6 @@ const SUPABASE_ANON_KEY = 'sb_publishable_Y4Aw_FZ1fMrlZAhYiRRiWg_HPW1kwIp';
 
   function onAuthStateChange(callback) {
     _listeners.push(callback);
-    // If already ready, fire immediately with current state
     if (_state.ready) {
       callback({ event: 'INITIAL', session: _state.session, status: _state.status });
     }
@@ -95,9 +94,22 @@ const SUPABASE_ANON_KEY = 'sb_publishable_Y4Aw_FZ1fMrlZAhYiRRiWg_HPW1kwIp';
   });
 
   // ── Initialise on load ──────────────────────────────────────────────────────
-  // Resolves any existing session (including after OAuth redirect).
+  // Manually extract tokens from the URL hash to bypass the bad_oauth_state
+  // error that occurs when Supabase's state check fails on static sites.
 
   (async function init() {
+    const hash = window.location.hash;
+    if (hash && hash.includes('access_token=')) {
+      const params = new URLSearchParams(hash.substring(1));
+      const accessToken = params.get('access_token');
+      const refreshToken = params.get('refresh_token');
+      if (accessToken && refreshToken) {
+        await client.auth.setSession({ access_token: accessToken, refresh_token: refreshToken });
+      }
+      // Clean up the ugly URL hash
+      window.history.replaceState({}, document.title, _cleanUrl);
+    }
+
     const session = await getSession();
     _state.session = session;
     _state.status = session ? await getStatus() : null;
