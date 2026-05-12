@@ -16,11 +16,20 @@ console.clear = function() {};
 
   async function getStatus(session) {
     if (!session) return null;
-    console.log('[SA] checking profile for', session.user.id);
-    const { data, error } = await client.from('profiles').select('status').eq('id', session.user.id).single();
-    console.log('[SA] profile result:', data, error ? error.message : 'ok');
-    if (error) return null;
-    return data.status;
+    try {
+      console.log('[SA] fetching profile...');
+      const resp = await fetch(
+        SUPABASE_URL + '/rest/v1/profiles?select=status&id=eq.' + session.user.id + '&limit=1',
+        { headers: { 'apikey': SUPABASE_ANON_KEY, 'Authorization': 'Bearer ' + session.access_token } }
+      );
+      const data = await resp.json();
+      console.log('[SA] profile data:', JSON.stringify(data));
+      if (!Array.isArray(data) || data.length === 0) return null;
+      return data[0].status;
+    } catch(e) {
+      console.error('[SA] getStatus error:', e.message);
+      return null;
+    }
   }
 
   const _cleanUrl = window.location.origin + window.location.pathname;
@@ -57,21 +66,20 @@ console.clear = function() {};
     console.log('[SA] authStateChange:', event, session ? session.user.email : 'null');
     _state.session = session;
     _state.status = await getStatus(session);
-    console.log('[SA] status after auth change:', _state.status);
+    console.log('[SA] status:', _state.status);
     _notify(event, session, _state.status);
   });
 
   (async function init() {
-    console.log('[SA] init');
+    console.log('[SA] init, hash:', window.location.hash ? 'present' : 'empty');
     const hash = window.location.hash;
     if (hash && hash.includes('access_token=')) {
       const p = new URLSearchParams(hash.substring(1));
       const at = p.get('access_token');
       const rt = p.get('refresh_token');
       if (at && rt) {
-        console.log('[SA] setting session from hash');
         const { data, error } = await client.auth.setSession({ access_token: at, refresh_token: rt });
-        console.log('[SA] setSession result:', error ? error.message : 'ok', data.session ? data.session.user.email : 'no session');
+        console.log('[SA] setSession:', error ? error.message : 'ok');
         if (!error && data.session) {
           _state.session = data.session;
           _state.status = await getStatus(data.session);
@@ -84,7 +92,7 @@ console.clear = function() {};
       _state.session = session;
       _state.status = await getStatus(session);
     }
-    console.log('[SA] ready — session:', _state.session ? _state.session.user.email : 'none', '| status:', _state.status);
+    console.log('[SA] ready. session:', _state.session ? _state.session.user.email : 'none', 'status:', _state.status);
     _state.ready = true;
     _notify('INITIAL', _state.session, _state.status);
   })();
