@@ -162,6 +162,25 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
     else if (key === _V.winstr) await _syncSettings({ weekly_instructions: blob || '' });
     // chat / docs / notifs / review / recur / tokens: still safe in localStorage; mirrored in a later step
   }
+  async function debugMirror() {
+    const out = { loggedIn: !!_state.session, userId: (_state.session && _state.session.user && _state.session.user.id) || null };
+    try {
+      const ws = await _getWorkspace();
+      out.workspace = ws || null;
+      if (!ws) { out.problem = 'no workspace found for this user'; }
+      else {
+        const row = { id: 'dbg-' + Date.now(), workspace_id: ws, text: 'debug test', notes: '', category: 'todo',
+          status: 'todo', priority: '', due_date: null, tags: [], sort_order: 0, created_at: new Date().toISOString() };
+        const ins = await client.from('tasks').insert(row);
+        out.insert = ins.error ? ('ERROR: ' + ins.error.message + ' | code=' + (ins.error.code || '') + ' | details=' + (ins.error.details || '') + ' | hint=' + (ins.error.hint || '')) : 'OK';
+        const c = await client.from('tasks').select('id', { count: 'exact', head: true }).eq('workspace_id', ws);
+        out.tasksCount = c.error ? ('countERROR: ' + c.error.message) : c.count;
+      }
+    } catch (e) { out.threw = (e && e.message) || String(e); }
+    console.log('[SA][debug] ' + JSON.stringify(out));
+    return out;
+  }
+
   window.storage = {
     get: async function () { return null; }, // mirror-first: app keeps reading localStorage
     set: async function (key, jsonStr) {
@@ -184,5 +203,5 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
   }
   client.auth.onAuthStateChange((_e, session) => { if (session) _migrateOnce(); });
 
-  window.SupabaseAuth = { signInWithGoogle, signOut, getSession, getStatus, onAuthStateChange, _state };
+  window.SupabaseAuth = { signInWithGoogle, signOut, getSession, getStatus, onAuthStateChange, _state, debugMirror, _client: client };
 })();
