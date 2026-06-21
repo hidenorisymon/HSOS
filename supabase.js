@@ -206,7 +206,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
         const map = {};
         (r.data || []).forEach(row => { map[row.key] = row.value; });
         // record the last-synced cloud snapshot for the shared data keys (merge base)
-        [_DK.tasks, _DK.cats, _DK.exp].forEach(k => { if (map[k] != null) _baseSet(k, map[k]); });
+        [_DK.tasks, _DK.cats, _DK.exp, _DK.tok].forEach(k => { if (map[k] != null) _baseSet(k, map[k]); });
         return (_kv = map);
       } catch (e) { console.warn('[SA] kv load:', e && e.message); _kvPromise = null; return null; }
     })();
@@ -226,8 +226,8 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
   // Shared data keys that multiple writers touch. For these, every save MERGES with the
   // freshest cloud copy using a "base" snapshot (last value we synced) so that: adds from
   // either side are kept, real deletes propagate, and an empty/failed load can't wipe data.
-  const _DK = { tasks: 'bd-e5', cats: 'bd-c5', exp: 'bd-exp5' };
-  const _isData = (k) => k === _DK.tasks || k === _DK.cats || k === _DK.exp;
+  const _DK = { tasks: 'bd-e5', cats: 'bd-c5', exp: 'bd-exp5', tok: 'bd-tok5' };
+  const _isData = (k) => k === _DK.tasks || k === _DK.cats || k === _DK.exp || k === _DK.tok;
   const _baseGet = (k) => { try { const v = localStorage.getItem('bd-base-' + k); return v ? JSON.parse(v) : null; } catch (e) { return null; } };
   const _baseSet = (k, v) => { try { localStorage.setItem('bd-base-' + k, JSON.stringify(v)); } catch (e) {} };
   function _mergeArr(base, ours, theirs) {
@@ -262,11 +262,23 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
     if (ours && typeof ours === 'object') for (const c of Object.keys(ours)) if (!(c in g)) g[c] = []; // keep empty columns
     return g;
   }
+  function _mergeTokens(base, ours, theirs) { // {input,output,days:{YYYY-MM-DD:{input,output}}} — keep the larger per field/day
+    base = base || {}; ours = ours || {}; theirs = theirs || {};
+    const oTot = (ours.input || 0) + (ours.output || 0), tTot = (theirs.input || 0) + (theirs.output || 0);
+    if (oTot === 0 && tTot > 0) return theirs; // anti-wipe: empty local can't erase cloud usage
+    const days = {}; const od = ours.days || {}, td = theirs.days || {};
+    for (const d of new Set([...Object.keys(od), ...Object.keys(td)])) {
+      const a = od[d] || {}, b = td[d] || {};
+      days[d] = { input: Math.max(a.input || 0, b.input || 0), output: Math.max(a.output || 0, b.output || 0) };
+    }
+    return { input: Math.max(ours.input || 0, theirs.input || 0), output: Math.max(ours.output || 0, theirs.output || 0), days };
+  }
   function _mergeBlob(key, ours, theirs) {
     const base = _baseGet(key);
     if (key === _DK.exp) return _mergeExp(base, ours, theirs);
     if (key === _DK.tasks) return _mergeEntries(base, ours, theirs);
     if (key === _DK.cats) return _mergeArr(base, ours, theirs);
+    if (key === _DK.tok) return _mergeTokens(base, ours, theirs);
     return ours;
   }
   async function _freshCloud(key) { // value | null (no row / no ws) | undefined (read FAILED)
