@@ -253,6 +253,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
     out.streams = _mergeArr(base.streams, ours.streams, theirs.streams);
     out.budgets = _mergeObj(base.budgets, ours.budgets, theirs.budgets);
     if (Array.isArray(ours.accounts) || Array.isArray(theirs.accounts)) out.accounts = _mergeArr(base.accounts, ours.accounts, theirs.accounts);
+    if (Array.isArray(ours.payments) || Array.isArray(theirs.payments)) out.payments = _mergeArr(base.payments, ours.payments, theirs.payments);
     return out;
   }
   function _mergeEntries(base, ours, theirs) {
@@ -279,8 +280,11 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
 
   window.storage = {
     get: async function (key) {
-      try { const kv = await _loadKV(); if (kv && kv[key] != null) return { value: JSON.stringify(kv[key]) }; }
-      catch (e) { console.warn('[SA] get failed for', key, e && e.message); }
+      try {
+        // Kiko's conversation memory updates server-side between loads — always read it fresh.
+        if (key === 'bd-kiko-state') { const v = await _freshCloud(key); return (v != null && v !== undefined) ? { value: JSON.stringify(v) } : null; }
+        const kv = await _loadKV(); if (kv && kv[key] != null) return { value: JSON.stringify(kv[key]) };
+      } catch (e) { console.warn('[SA] get failed for', key, e && e.message); }
       return null; // -> pe() falls back to localStorage
     },
     set: async function (key, jsonStr) {
