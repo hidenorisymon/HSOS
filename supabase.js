@@ -259,7 +259,34 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
       console.log('[SA] app_state seed complete');
     }
   }
-  client.auth.onAuthStateChange((_e, session) => { if (session) _migrateOnce(); });
+  // one-time: remove the retired "research" board column + move its tasks to To Do
+  async function _cleanupResearchOnce() {
+    if (localStorage.getItem('bd-research-removed-v1')) return;
+    const ws = await _getWorkspace();
+    if (!ws) return;
+    const kv = await _loadKV();
+    const read = (k) => { if (kv && kv[k] != null) return kv[k];
+      try { const v = localStorage.getItem(k); return v != null ? JSON.parse(v) : null; } catch (e) { return null; } };
+    const write = async (k, val) => { const s = JSON.stringify(val);
+      try { localStorage.setItem(k, s); } catch (e) {}
+      try { await _kvSet(k, val); } catch (e) {}
+      try { await _mirror(k, val); } catch (e) {} };
+    try {
+      const cats = read('bd-c5');
+      if (Array.isArray(cats) && cats.some(c => c && c.id === 'research'))
+        await write('bd-c5', cats.filter(c => !(c && c.id === 'research')));
+      const ent = read('bd-e5');
+      if (ent && typeof ent === 'object' && 'research' in ent) {
+        const moved = Array.isArray(ent.research) ? ent.research.map(t => ({ ...t, category: 'todo' })) : [];
+        ent.todo = [...moved, ...(Array.isArray(ent.todo) ? ent.todo : [])];
+        delete ent.research;
+        await write('bd-e5', ent);
+      }
+      localStorage.setItem('bd-research-removed-v1', '1');
+      console.log('[SA] research cleanup complete');
+    } catch (e) { console.warn('[SA] research cleanup:', e && e.message); }
+  }
+  client.auth.onAuthStateChange((_e, session) => { if (session) { _migrateOnce().then(_cleanupResearchOnce); } });
 
   window.SupabaseAuth = { signInWithGoogle, signOut, getSession, getStatus, onAuthStateChange, _state };
 })();
