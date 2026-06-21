@@ -294,7 +294,7 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
     get: async function (key) {
       try {
         // Kiko's conversation memory updates server-side between loads — always read it fresh.
-        if (key === 'bd-kiko-state') { const v = await _freshCloud(key); return (v != null && v !== undefined) ? { value: JSON.stringify(v) } : null; }
+        if (key === 'bd-kiko-state' || key === 'bd-kiko-tok') { const v = await _freshCloud(key); return (v != null && v !== undefined) ? { value: JSON.stringify(v) } : null; }
         const kv = await _loadKV(); if (kv && kv[key] != null) return { value: JSON.stringify(kv[key]) };
       } catch (e) { console.warn('[SA] get failed for', key, e && e.message); }
       return null; // -> pe() falls back to localStorage
