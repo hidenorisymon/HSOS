@@ -247,12 +247,13 @@ const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBh
   const _flatTasks = (o) => { const out = []; if (o && typeof o === 'object') for (const c of Object.keys(o)) (Array.isArray(o[c]) ? o[c] : []).forEach(t => { if (t && t.id != null) out.push(Object.assign({}, t, { category: t.category || c })); }); return out; };
   function _mergeExp(base, ours, theirs) {
     base = base || {}; ours = ours || {}; theirs = theirs || {};
-    return {
-      expenses: _mergeArr(base.expenses, ours.expenses, theirs.expenses),
-      income: _mergeArr(base.income, ours.income, theirs.income),
-      streams: _mergeArr(base.streams, ours.streams, theirs.streams),
-      budgets: _mergeObj(base.budgets, ours.budgets, theirs.budgets),
-    };
+    const out = Object.assign({}, theirs, ours); // preserve accounts/fmeta/debts/payments + any future keys (ours wins)
+    out.expenses = _mergeArr(base.expenses, ours.expenses, theirs.expenses);
+    out.income = _mergeArr(base.income, ours.income, theirs.income);
+    out.streams = _mergeArr(base.streams, ours.streams, theirs.streams);
+    out.budgets = _mergeObj(base.budgets, ours.budgets, theirs.budgets);
+    if (Array.isArray(ours.accounts) || Array.isArray(theirs.accounts)) out.accounts = _mergeArr(base.accounts, ours.accounts, theirs.accounts);
+    return out;
   }
   function _mergeEntries(base, ours, theirs) {
     const merged = _mergeArr(_flatTasks(base), _flatTasks(ours), _flatTasks(theirs));
